@@ -441,11 +441,7 @@
     statusWrap.appendChild(statusText);
     indicatorStrip.appendChild(statusWrap);
 
-    var eqWrap = element("div", { id: "orbit-eq-wrap", style: "display:none;align-items:center;gap:3px;" }, [
-      element("span", { className: "orbit-eq-bar" }),
-      element("span", { className: "orbit-eq-bar" }),
-      element("span", { className: "orbit-eq-bar" })
-    ]);
+    var eqWrap = element("div", { id: "orbit-eq-wrap", style: "display:flex;align-items:center;" });
     indicatorStrip.appendChild(eqWrap);
     body.appendChild(indicatorStrip);
 
@@ -892,7 +888,32 @@
     var eq = document.querySelector("#orbit-eq-wrap");
     if (status) status.textContent = text;
     if (dot) dot.style.background = color || "#71717a";
-    if (eq) eq.style.display = translation.status === "playing" ? "flex" : "none";
+    if (eq) {
+      eq.style.display = "flex";
+      eq.innerHTML = "";
+      var isActive = translation.status === "playing" || translation.status === "listening" || translation.status === "connecting";
+      var svgNS = "http://www.w3.org/2000/svg";
+      var svg = document.createElementNS(svgNS, "svg");
+      svg.setAttribute("width", "72");
+      svg.setAttribute("height", "22");
+      svg.setAttribute("style", "overflow:visible;color:#e7e9ee;");
+      var barCount = 8;
+      var width = 72;
+      var height = 22;
+      for (var i = 0; i < barCount; i++) {
+        var rect = document.createElementNS(svgNS, "rect");
+        var val = isActive ? Math.random() * 0.75 + 0.25 : 0.15;
+        rect.setAttribute("x", String(i * (width / barCount)));
+        rect.setAttribute("y", String(height * (1 - val)));
+        rect.setAttribute("width", String(Math.max(2, (width / barCount) - 2)));
+        rect.setAttribute("height", String(height * val));
+        rect.setAttribute("rx", "1.5");
+        rect.setAttribute("fill", "currentColor");
+        rect.setAttribute("opacity", isActive ? "0.9" : "0.4");
+        svg.appendChild(rect);
+      }
+      eq.appendChild(svg);
+    }
     var retry = document.querySelector("#orbit-retry");
     if (retry) retry.style.display = translation.status === "error" ? "block" : "none";
   }

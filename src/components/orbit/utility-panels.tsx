@@ -11,9 +11,9 @@ import {
   RotateCcw,
   Search,
   Sparkles,
-  Volume2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { D3Equalizer } from "@/components/orbit/d3-equalizer";
 import { useLiveTranslation } from "@/lib/live-translation";
 import { TRANSLATION_LANGUAGES, type TranslationLanguage } from "@/lib/translation-languages";
 import { cn } from "@/lib/cn";
@@ -192,15 +192,7 @@ export function TranslatorPanel({
         </div>
 
         <div className="flex items-center gap-2">
-          {state.status === "playing" ? (
-            <div className="eq shrink-0">
-              <span />
-              <span />
-              <span />
-            </div>
-          ) : (
-            <Volume2 className="size-4 shrink-0 text-faint" />
-          )}
+          <D3Equalizer active={state.status === "playing" || state.status === "listening"} barCount={10} height={22} width={72} />
         </div>
       </div>
 
