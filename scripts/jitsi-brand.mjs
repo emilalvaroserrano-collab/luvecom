@@ -52,6 +52,17 @@ const cache = new Map();
 
 const ASSET_EXT = /\.(js|mjs|css|map|png|jpg|jpeg|gif|svg|webp|ico|woff2?|ttf|mp3|wav|wasm|json|webmanifest)$/i;
 
+function getLocal(pathname) {
+  if (pathname === "/orbit-extension.js") {
+    try {
+      return { type: "application/javascript; charset=utf-8", body: readFileSync(join(VENDOR, "orbit-extension.js")) };
+    } catch {
+      return LOCAL[pathname];
+    }
+  }
+  return LOCAL[pathname];
+}
+
 export function passesThrough(pathname) {
   return (
     pathname.startsWith("/__grok") ||
@@ -120,7 +131,7 @@ export async function handleJitsiRequest(urlString, method, accept) {
   const pathname = url.pathname;
   if (passesThrough(pathname) || isMeetProxyPath(pathname)) return null;
 
-  const local = LOCAL[pathname];
+  const local = getLocal(pathname);
   if (local && (method === "GET" || method === "HEAD")) {
     return {
       status: 200,

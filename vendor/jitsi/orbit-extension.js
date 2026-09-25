@@ -3,9 +3,9 @@
   var DONATE_ID = "orbit-donate";
   var LIVE_MODEL = "models/gemini-3.5-live-translate-preview";
   var LIVE_SOCKET_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
-  var POLL_MS = 750;
+  var POLL_MS = 1000;
   var DONATION_AMOUNTS = [10, 25, 50, 100];
-  var panel = { active: null, target: "en", languages: null, languagesLoading: false };
+  var panel = { active: null, target: "en", languages: null, languagesLoading: false, audioSource: "auto", micStream: null };
   var translation = {
     status: "idle",
     error: "",
@@ -78,94 +78,113 @@
     return node;
   }
 
-  function panelState() {
-    var store = appStore();
-    if (!store) {
-      return null;
-    }
-    return store.getState()["features/custom-panel"] || null;
-  }
-
-  function panelHost() {
-    var root = document.getElementById("custom-panel");
-    var index;
-    if (!root) {
-      return null;
-    }
-    for (index = 0; index < root.children.length; index += 1) {
-      var child = root.children[index];
-      if (String(child.className || "").indexOf("contentContainer") !== -1) {
-        return child;
-      }
-    }
-    return null;
-  }
-
-  function setPanelSide(mode) {
-    var root = document.getElementById("custom-panel");
-    if (!root) {
-      return;
-    }
-    if (mode === "translator") {
-      root.setAttribute("data-orbit-side", "left");
-    } else if (mode === "donate") {
-      root.setAttribute("data-orbit-side", "right");
-    } else {
-      root.removeAttribute("data-orbit-side");
-    }
-  }
-
-  function injectPanelSideStyle() {
-    if (document.getElementById("orbit-panel-side")) {
+  function injectSidebarStyles() {
+    if (document.getElementById("orbit-custom-sidebar-styles")) {
       return;
     }
     var style = document.createElement("style");
-    style.id = "orbit-panel-side";
-    style.textContent = "#custom-panel[data-orbit-side='left']{order:-1;}#custom-panel[data-orbit-side='left'] .customPanelDragHandleContainer{left:auto !important;right:4px !important;}";
+    style.id = "orbit-custom-sidebar-styles";
+    style.textContent = [
+      "#orbit-custom-sidebar {",
+      "  position: fixed;",
+      "  top: 0;",
+      "  bottom: 0;",
+      "  left: 0;",
+      "  width: 380px;",
+      "  max-width: calc(100vw - 24px);",
+      "  background: #121214;",
+      "  border-right: 1px solid rgba(255,255,255,0.12);",
+      "  box-shadow: 4px 0 32px rgba(0,0,0,0.65);",
+      "  z-index: 10005;",
+      "  display: flex;",
+      "  flex-direction: column;",
+      "  color: #f4f4f5;",
+      "  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;",
+      "  transform: translateX(-105%);",
+      "  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), visibility 0.28s;",
+      "  visibility: hidden;",
+      "  overflow: hidden;",
+      "}",
+      "#orbit-custom-sidebar.orbit-open {",
+      "  transform: translateX(0) !important;",
+      "  visibility: visible !important;",
+      "}",
+      "#orbit-custom-sidebar[data-side='right'] {",
+      "  left: auto;",
+      "  right: 0;",
+      "  border-right: none;",
+      "  border-left: 1px solid rgba(255,255,255,0.12);",
+      "  transform: translateX(105%);",
+      "}",
+      ".orbit-lang-item:hover { background: rgba(255,255,255,0.07); }",
+      ".orbit-lang-item.orbit-selected { background: rgba(231,233,238,0.16); color: #fff; font-weight: 600; }",
+      ".orbit-eq-bar { display: inline-block; width: 3px; height: 12px; background: #e7e9ee; border-radius: 1px; animation: orbit-eq 0.8s ease-in-out infinite alternate; }",
+      ".orbit-eq-bar:nth-child(2) { animation-delay: 0.15s; }",
+      ".orbit-eq-bar:nth-child(3) { animation-delay: 0.3s; }",
+      "@keyframes orbit-eq { from { transform: scaleY(0.3); } to { transform: scaleY(1); } }",
+      "#orbit-custom-backdrop {",
+      "  position: fixed;",
+      "  inset: 0;",
+      "  background: rgba(0,0,0,0.4);",
+      "  z-index: 10004;",
+      "  display: none;",
+      "}",
+      "#orbit-custom-backdrop.orbit-open { display: block; }"
+    ].join("\n");
     document.head.appendChild(style);
   }
 
+  function getSidebarContainer() {
+    var sidebar = document.getElementById("orbit-custom-sidebar");
+    var backdrop = document.getElementById("orbit-custom-backdrop");
+    if (!backdrop) {
+      backdrop = document.createElement("div");
+      backdrop.id = "orbit-custom-backdrop";
+      backdrop.addEventListener("click", closeWrapper);
+      document.body.appendChild(backdrop);
+    }
+    if (!sidebar) {
+      sidebar = document.createElement("aside");
+      sidebar.id = "orbit-custom-sidebar";
+      document.body.appendChild(sidebar);
+    }
+    return sidebar;
+  }
+
   function closeWrapper() {
-    var store = appStore();
+    var sidebar = getSidebarContainer();
+    var backdrop = document.getElementById("orbit-custom-backdrop");
     panel.active = null;
-    setPanelSide(null);
-    stopTranslation();
+    sidebar.classList.remove("orbit-open");
+    if (backdrop) {
+      backdrop.classList.remove("orbit-open");
+    }
+    var store = appStore();
     try {
       if (store) {
         store.dispatch({ type: "CUSTOM_PANEL_CLOSE" });
       }
     } catch (ignored) {
-      return;
-    }
-    var host = panelHost();
-    if (host) {
-      host.innerHTML = "";
+      // Ignore
     }
   }
 
   function openPanel(mode) {
-    var store = appStore();
-    if (!store) {
-      return;
-    }
-    try {
-      store.dispatch({ type: "SET_CUSTOM_PANEL_ENABLED", enabled: true });
-      store.dispatch({ type: "CUSTOM_PANEL_OPEN" });
-    } catch (ignored) {
-      return;
-    }
+    var sidebar = getSidebarContainer();
+    var backdrop = document.getElementById("orbit-custom-backdrop");
     panel.active = mode;
-    setPanelSide(mode);
-    window.setTimeout(renderActivePanel, 60);
-    window.setTimeout(renderActivePanel, 450);
+    sidebar.setAttribute("data-side", mode === "translator" ? "left" : "right");
+    sidebar.classList.add("orbit-open");
+    if (backdrop && window.innerWidth < 768) {
+      backdrop.classList.add("orbit-open");
+    }
+    renderActivePanel();
   }
 
   function togglePanel(mode) {
-    var state = panelState();
-    if (panel.active === mode && state && state.isOpen) {
+    if (panel.active === mode) {
       closeWrapper();
     } else {
-      stopTranslation(false);
       if (mode === "translator") {
         primeTranslationAudio();
       }
@@ -217,7 +236,7 @@
   }
 
   function documentClick(event) {
-    var node = event.target && event.target.closest ? event.target.closest("button,[role='button']") : null;
+    var node = event.target && event.target.closest ? event.target.closest("button,[role='button'],.toolbox-button") : null;
     var image;
     var source;
     if (!node) {
@@ -226,29 +245,28 @@
     image = node.querySelector("img");
     source = image ? String(image.getAttribute("src") || "") : "";
     var label = buttonLabel(node);
-    if (source.indexOf("orbit-translator.svg") !== -1 || label === "translator") {
-      if (Date.now() - lastAction.time < 500 && lastAction.key === TRANSLATOR_ID) {
+    if (source.indexOf("orbit-translator.svg") !== -1 || label.indexOf("translator") !== -1 || label.indexOf("translate") !== -1) {
+      if (Date.now() - lastAction.time < 400 && lastAction.key === TRANSLATOR_ID) {
         return;
       }
       handleToolbarKey(TRANSLATOR_ID);
+      event.preventDefault();
+      event.stopPropagation();
       return;
     }
-    if (source.indexOf("orbit-donate.svg") !== -1 || label === "donate") {
-      if (Date.now() - lastAction.time < 500 && lastAction.key === DONATE_ID) {
+    if (source.indexOf("orbit-donate.svg") !== -1 || label.indexOf("donate") !== -1) {
+      if (Date.now() - lastAction.time < 400 && lastAction.key === DONATE_ID) {
         return;
       }
       handleToolbarKey(DONATE_ID);
+      event.preventDefault();
+      event.stopPropagation();
     }
   }
 
   function renderActivePanel() {
-    var host = panelHost();
-    var state = panelState();
-    if (!host || !panel.active || !state || !state.isOpen) {
-      return;
-    }
-    var marker = host.querySelector("[data-orbit-panel='" + panel.active + "']");
-    if (marker) {
+    var host = getSidebarContainer();
+    if (!panel.active) {
       return;
     }
     host.innerHTML = "";
@@ -260,19 +278,19 @@
   }
 
   function panelShell(title, body) {
-    var wrapper = element("div", { "data-orbit-panel": panel.active, style: "display:flex;flex-direction:column;height:100%;min-height:0;background:inherit;color:inherit;font:inherit;" });
-    var header = element("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 14px 10px;border-bottom:1px solid rgba(128,128,128,.35);" });
-    header.appendChild(element("div", { style: "font-size:15px;font-weight:650;" }, [title]));
-    var close = element("button", { type: "button", "aria-label": "Close panel", style: "width:34px;height:34px;border:1px solid rgba(128,128,128,.45);border-radius:999px;background:transparent;color:inherit;font-size:18px;line-height:1;cursor:pointer;" }, ["×"]);
+    var wrapper = element("div", { style: "display:flex;flex-direction:column;height:100%;min-height:0;background:#121214;color:#f4f4f5;font-size:14px;" });
+    var header = element("div", { style: "display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,0.12);" });
+    header.appendChild(element("div", { style: "font-size:16px;font-weight:600;letter-spacing:-0.01em;" }, [title]));
+    var close = element("button", {
+      type: "button",
+      "aria-label": "Close panel",
+      style: "display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid rgba(255,255,255,0.15);border-radius:8px;background:rgba(255,255,255,0.06);color:#f4f4f5;font-size:18px;line-height:1;cursor:pointer;transition:all 0.15s;"
+    }, ["✕"]);
     close.addEventListener("click", closeWrapper);
     header.appendChild(close);
     wrapper.appendChild(header);
     wrapper.appendChild(body);
     return wrapper;
-  }
-
-  function statusDot(color) {
-    return element("span", { style: "width:8px;height:8px;border-radius:999px;background:" + color + ";flex:none;" });
   }
 
   function loadLanguages(done) {
@@ -286,15 +304,13 @@
           window.clearInterval(waiter);
           done(panel.languages || []);
         }
-      }, 250);
+      }, 200);
       return;
     }
     panel.languagesLoading = true;
-    fetch("/api/translation-languages", { headers: { accept: "*/*" } })
+    fetch("/api/translation-languages", { headers: { accept: "application/json" } })
       .then(function(response) {
-        if (!response.ok) {
-          throw new Error("languages");
-        }
+        if (!response.ok) throw new Error("languages");
         return response.json();
       })
       .then(function(languages) {
@@ -303,109 +319,271 @@
         done(panel.languages);
       })
       .catch(function() {
-        panel.languages = [];
+        panel.languages = [
+          { name: "English", code: "en" },
+          { name: "Spanish", code: "es" },
+          { name: "French", code: "fr" },
+          { name: "German", code: "de" },
+          { name: "Japanese", code: "ja" },
+          { name: "Chinese (Simplified)", code: "zh-Hans" }
+        ];
         panel.languagesLoading = false;
-        done([]);
+        done(panel.languages);
       });
   }
 
   function renderTranslator() {
-    var body = element("div", { style: "display:flex;flex-direction:column;min-height:0;flex:1;" });
-    var top = element("div", { style: "padding:12px 14px;border-bottom:1px solid rgba(128,128,128,.35);" });
-    var label = element("label", { htmlFor: "orbit-language", style: "display:block;font-size:13px;font-weight:600;margin-bottom:8px;" }, ["Translate incoming speech into"]);
-    var select = element("select", { id: "orbit-language", style: "width:100%;height:42px;border:1px solid rgba(128,128,128,.55);border-radius:8px;background:rgba(0,0,0,.18);color:inherit;padding:0 10px;font-size:14px;" });
-    select.appendChild(element("option", { value: "", text: "Loading languages…" }));
-    select.addEventListener("change", function() {
-      if (!select.value) {
+    var body = element("div", { style: "display:flex;flex-direction:column;min-height:0;flex:1;background:#121214;" });
+
+    // Target Language Selector with searchable dropdown
+    var langSection = element("div", { style: "padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.1);position:relative;" });
+    var label = element("label", { style: "display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#a1a1aa;margin-bottom:8px;" }, ["Target Language"]);
+    langSection.appendChild(label);
+
+    var triggerBtn = element("button", {
+      type: "button",
+      id: "orbit-lang-trigger",
+      style: "width:100%;height:44px;border:1px solid rgba(255,255,255,0.18);border-radius:10px;background:#0a0a0b;color:#f4f4f5;padding:0 12px;font-size:14px;font-weight:500;display:flex;align-items:center;justify-content:space-between;cursor:pointer;"
+    });
+    var currentLangDisplay = element("span", { id: "orbit-lang-display", text: "English (en)" });
+    var arrowIcon = element("span", { style: "font-size:11px;color:#a1a1aa;" }, ["▼"]);
+    triggerBtn.appendChild(currentLangDisplay);
+    triggerBtn.appendChild(arrowIcon);
+    langSection.appendChild(triggerBtn);
+
+    // Dropdown list container
+    var dropdownMenu = element("div", {
+      id: "orbit-lang-dropdown",
+      style: "display:none;position:absolute;top:100%;left:16px;right:16px;max-height:280px;background:#18181b;border:1px solid rgba(255,255,255,0.2);border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,0.7);z-index:100;overflow:hidden;flex-direction:column;"
+    });
+
+    var searchWrap = element("div", { style: "padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.1);" });
+    var searchInput = element("input", {
+      type: "text",
+      placeholder: "Search 80+ languages…",
+      style: "width:100%;height:34px;background:#0a0a0b;border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#f4f4f5;padding:0 10px;font-size:13px;outline:none;"
+    });
+    searchWrap.appendChild(searchInput);
+    dropdownMenu.appendChild(searchWrap);
+
+    var listWrap = element("div", { id: "orbit-lang-list", style: "flex:1;overflow-y:auto;max-height:220px;padding:4px;" });
+    dropdownMenu.appendChild(listWrap);
+    langSection.appendChild(dropdownMenu);
+    body.appendChild(langSection);
+
+    function populateLanguages(languages, filter) {
+      listWrap.innerHTML = "";
+      var q = (filter || "").toLowerCase().trim();
+      var filtered = languages.filter(function(l) {
+        return !q || l.name.toLowerCase().indexOf(q) !== -1 || l.code.toLowerCase().indexOf(q) !== -1;
+      });
+
+      if (!filtered.length) {
+        listWrap.appendChild(element("div", { style: "padding:12px;text-align:center;font-size:12px;color:#a1a1aa;" }, ["No matching languages"]));
         return;
       }
-      panel.target = select.value;
-      syncTranslation();
-    });
-    top.appendChild(label);
-    top.appendChild(select);
-    body.appendChild(top);
 
-    var statusRow = element("div", { style: "display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid rgba(128,128,128,.35);font-size:13px;opacity:.9;" });
-    var dot = statusDot("#888");
-    var statusText = element("span", { id: "orbit-translation-status", text: "Starting…" });
-    statusRow.appendChild(dot);
-    statusRow.appendChild(statusText);
-    body.appendChild(statusRow);
-    body.appendChild(element("div", {
-      id: "orbit-translation-debug",
-      style: "padding:7px 14px;border-bottom:1px solid rgba(128,128,128,.25);font-size:11px;line-height:1.35;opacity:.68;"
-    }, ["Audio sources: 0 • PCM packets: 0"]));
-
-    var scroll = element("div", { style: "flex:1;min-height:0;overflow-y:auto;padding:12px 14px 16px;" });
-    scroll.appendChild(element("div", { style: "font-size:12px;font-weight:700;opacity:.75;margin-bottom:4px;" }, ["Original"]));
-    scroll.appendChild(element("div", { id: "orbit-source-text", style: "font-size:14px;line-height:1.45;margin-bottom:14px;" }, ["Waiting for participant audio."]));
-    scroll.appendChild(element("div", { id: "orbit-target-label", style: "font-size:12px;font-weight:700;opacity:.75;margin-bottom:4px;" }, ["Translation"]));
-    scroll.appendChild(element("div", { id: "orbit-translated-text", style: "font-size:14px;line-height:1.45;" }, ["Translation will appear here."]));
-    scroll.appendChild(element("div", { style: "margin-top:14px;" }, [
-      element("button", { id: "orbit-retry", type: "button", style: "display:none;width:100%;height:42px;border-radius:8px;border:1px solid rgba(128,128,128,.55);background:rgba(255,255,255,.08);color:inherit;font-size:14px;font-weight:600;cursor:pointer;" }, ["Try again"])
-    ]));
-    body.appendChild(scroll);
-
-    var retry = scroll.querySelector("#orbit-retry");
-    if (retry) {
-      retry.addEventListener("click", function() {
-        stopTranslation(true);
-        primeTranslationAudio();
-        syncTranslation();
+      filtered.forEach(function(lang) {
+        var isSelected = lang.code === panel.target;
+        var item = element("button", {
+          type: "button",
+          className: "orbit-lang-item" + (isSelected ? " orbit-selected" : ""),
+          style: "width:100%;display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:none;border-radius:6px;background:transparent;color:#f4f4f5;font-size:13px;cursor:pointer;text-align:left;"
+        });
+        item.appendChild(element("span", {}, [
+          element("span", { style: "display:inline-block;width:24px;font-size:11px;color:#71717a;" }, [lang.code]),
+          lang.name
+        ]));
+        if (isSelected) {
+          item.appendChild(element("span", { style: "color:#e7e9ee;font-weight:700;" }, ["✓"]));
+        }
+        item.addEventListener("click", function() {
+          panel.target = lang.code;
+          currentLangDisplay.textContent = lang.name + " (" + lang.code + ")";
+          dropdownMenu.style.display = "none";
+          syncTranslation();
+        });
+        listWrap.appendChild(item);
       });
     }
-    loadLanguages(function(languages) {
-      if (panel.active !== "translator") {
-        return;
+
+    triggerBtn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      var isShowing = dropdownMenu.style.display === "flex";
+      dropdownMenu.style.display = isShowing ? "none" : "flex";
+      if (!isShowing) {
+        searchInput.value = "";
+        searchInput.focus();
+        loadLanguages(function(langs) {
+          populateLanguages(langs, "");
+        });
       }
-      select.innerHTML = "";
-      if (!languages.length) {
-        select.appendChild(element("option", { value: "", text: "Languages unavailable" }));
-        setTranslationError("The language list could not be loaded. Please try again.");
-        return;
-      }
-      languages.forEach(function(language) {
-        if (!language || !language.code) {
-          return;
-        }
-        var option = element("option", { value: language.code, text: language.name || language.code });
-        if (language.code === panel.target) {
-          option.selected = true;
-        }
-        select.appendChild(option);
+    });
+
+    searchInput.addEventListener("input", function() {
+      loadLanguages(function(langs) {
+        populateLanguages(langs, searchInput.value);
       });
+    });
+
+    document.addEventListener("click", function(e) {
+      if (!langSection.contains(e.target)) {
+        dropdownMenu.style.display = "none";
+      }
+    });
+
+    // Model & Audio Indicator Strip
+    var indicatorStrip = element("div", { style: "display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(255,255,255,0.03);border-bottom:1px solid rgba(255,255,255,0.1);font-size:12px;" });
+    var statusWrap = element("div", { style: "display:flex;align-items:center;gap:8px;" });
+    var statusDot = element("span", { id: "orbit-status-dot", style: "width:8px;height:8px;border-radius:50%;background:#71717a;" });
+    var statusText = element("span", { id: "orbit-translation-status", text: "Ready" });
+    statusWrap.appendChild(statusDot);
+    statusWrap.appendChild(statusText);
+    indicatorStrip.appendChild(statusWrap);
+
+    var eqWrap = element("div", { id: "orbit-eq-wrap", style: "display:none;align-items:center;gap:3px;" }, [
+      element("span", { className: "orbit-eq-bar" }),
+      element("span", { className: "orbit-eq-bar" }),
+      element("span", { className: "orbit-eq-bar" })
+    ]);
+    indicatorStrip.appendChild(eqWrap);
+    body.appendChild(indicatorStrip);
+
+    // Model Tag
+    var modelTag = element("div", { style: "display:flex;align-items:center;justify-content:space-between;padding:6px 16px;background:rgba(255,255,255,0.02);border-bottom:1px solid rgba(255,255,255,0.06);font-size:11px;color:#a1a1aa;" }, [
+      element("span", { text: "gemini-3.5-live-translate-preview" }),
+      element("span", { style: "padding:2px 6px;background:rgba(255,255,255,0.08);border-radius:4px;font-size:10px;font-weight:600;color:#e7e9ee;", text: "AUDIO-TO-AUDIO" })
+    ]);
+    body.appendChild(modelTag);
+
+    // Audio Source Mode Switch (Remote & Shared Audio vs Microphone test mode)
+    var audioToggleWrap = element("div", { style: "padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;gap:8px;" });
+    var btnRoomAudio = element("button", {
+      type: "button",
+      id: "orbit-source-room",
+      style: "flex:1;height:34px;border:1px solid " + (panel.audioSource === "auto" ? "#e7e9ee" : "rgba(255,255,255,0.15)") + ";border-radius:8px;background:" + (panel.audioSource === "auto" ? "rgba(255,255,255,0.12)" : "transparent") + ";color:#f4f4f5;font-size:12px;font-weight:500;cursor:pointer;",
+      text: "👥 Remote & Shared Audio"
+    });
+    var btnMicAudio = element("button", {
+      type: "button",
+      id: "orbit-source-mic",
+      style: "flex:1;height:34px;border:1px solid " + (panel.audioSource === "mic" ? "#e7e9ee" : "rgba(255,255,255,0.15)") + ";border-radius:8px;background:" + (panel.audioSource === "mic" ? "rgba(255,255,255,0.12)" : "transparent") + ";color:#f4f4f5;font-size:12px;font-weight:500;cursor:pointer;",
+      text: "🎤 Test Mic Mode"
+    });
+
+    btnRoomAudio.addEventListener("click", function() {
+      panel.audioSource = "auto";
+      btnRoomAudio.style.borderColor = "#e7e9ee";
+      btnRoomAudio.style.background = "rgba(255,255,255,0.12)";
+      btnMicAudio.style.borderColor = "rgba(255,255,255,0.15)";
+      btnMicAudio.style.background = "transparent";
+      stopTranslation(true);
       syncTranslation();
     });
-    window.setTimeout(syncTranslation, 50);
-    return panelShell("Translator", body);
+
+    btnMicAudio.addEventListener("click", function() {
+      panel.audioSource = "mic";
+      btnMicAudio.style.borderColor = "#e7e9ee";
+      btnMicAudio.style.background = "rgba(255,255,255,0.12)";
+      btnRoomAudio.style.borderColor = "rgba(255,255,255,0.15)";
+      btnRoomAudio.style.background = "transparent";
+      if (!panel.micStream) {
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function(s) {
+          panel.micStream = s;
+          stopTranslation(true);
+          syncTranslation();
+        }).catch(function() {
+          setTranslationError("Microphone permission denied.");
+        });
+      } else {
+        stopTranslation(true);
+        syncTranslation();
+      }
+    });
+
+    audioToggleWrap.appendChild(btnRoomAudio);
+    audioToggleWrap.appendChild(btnMicAudio);
+    body.appendChild(audioToggleWrap);
+
+    // Transcripts and Live State Scroll Area
+    var scroll = element("div", { style: "flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;" });
+
+    // Original Speech Card
+    var origCard = element("div", { style: "background:#1a1a1e;border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px;" });
+    origCard.appendChild(element("div", { style: "font-size:11px;font-weight:700;text-transform:uppercase;color:#a1a1aa;letter-spacing:0.04em;margin-bottom:6px;" }, ["Original Speech"]));
+    var sourceText = element("div", { id: "orbit-source-text", style: "font-size:13.5px;line-height:1.45;color:#a1a1aa;user-select:text;", text: "Listening for remote participant & shared audio…" });
+    origCard.appendChild(sourceText);
+    scroll.appendChild(origCard);
+
+    // Translation Speech Card
+    var transCard = element("div", { style: "background:#1a1a1e;border:1px solid rgba(255,255,255,0.22);border-radius:10px;padding:12px;" });
+    var transHeader = element("div", { style: "display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;" });
+    transHeader.appendChild(element("div", { id: "orbit-target-label", style: "font-size:11px;font-weight:700;text-transform:uppercase;color:#e7e9ee;letter-spacing:0.04em;" }, ["Translated Speech"]));
+    transHeader.appendChild(element("div", { style: "font-size:10px;padding:2px 5px;background:rgba(255,255,255,0.1);border-radius:4px;color:#a1a1aa;", text: "Live Playout" }));
+    transCard.appendChild(transHeader);
+    var transText = element("div", { id: "orbit-translated-text", style: "font-size:14px;font-weight:500;line-height:1.45;color:#f4f4f5;user-select:text;", text: "Translated speech will play and appear here in real time." });
+    transCard.appendChild(transText);
+    scroll.appendChild(transCard);
+
+    // Debug & Stats
+    var debugNode = element("div", {
+      id: "orbit-translation-debug",
+      style: "font-size:11px;line-height:1.4;color:#71717a;margin-top:auto;"
+    }, ["Remote audio sources: 0 • Packets sent: 0"]);
+    scroll.appendChild(debugNode);
+
+    // Retry Button
+    var retryBtn = element("button", {
+      id: "orbit-retry",
+      type: "button",
+      style: "display:none;width:100%;height:40px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#f4f4f5;font-size:13px;font-weight:600;cursor:pointer;margin-top:8px;",
+      text: "↻ Reconnect live translator"
+    });
+    retryBtn.addEventListener("click", function() {
+      stopTranslation(true);
+      primeTranslationAudio();
+      syncTranslation();
+    });
+    scroll.appendChild(retryBtn);
+
+    body.appendChild(scroll);
+
+    // Initial load of language list
+    loadLanguages(function(languages) {
+      if (!languages.length) return;
+      var sel = languages.find(function(l) { return l.code === panel.target; }) || languages[0];
+      currentLangDisplay.textContent = sel.name + " (" + sel.code + ")";
+      populateLanguages(languages, "");
+      syncTranslation();
+    });
+
+    window.setTimeout(syncTranslation, 80);
+    return panelShell("Live Translator", body);
   }
 
   function renderDonate() {
-    var body = element("div", { style: "flex:1;min-height:0;overflow-y:auto;padding:14px;" });
-    var card = element("div", { style: "border:1px solid rgba(128,128,128,.4);border-radius:12px;padding:14px;margin-bottom:14px;" });
+    var body = element("div", { style: "flex:1;min-height:0;overflow-y:auto;padding:16px;background:#121214;" });
+    var card = element("div", { style: "border:1px solid rgba(255,255,255,0.12);background:#1a1a1e;border-radius:12px;padding:14px;margin-bottom:16px;" });
     card.appendChild(element("div", { style: "font-size:15px;font-weight:700;margin-bottom:6px;" }, ["Support Orbit"]));
-    card.appendChild(element("div", { style: "font-size:13.5px;line-height:1.45;opacity:.9;" }, ["Help keep simple, private meetings open to everyone."]));
+    card.appendChild(element("div", { style: "font-size:13px;line-height:1.45;color:#a1a1aa;" }, ["Help keep simple, private meetings open to everyone."]));
     body.appendChild(card);
-    body.appendChild(element("div", { style: "font-size:13px;font-weight:700;margin-bottom:8px;" }, ["Donation amount"]));
-    var grid = element("div", { style: "display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;" });
+    body.appendChild(element("div", { style: "font-size:13px;font-weight:600;margin-bottom:8px;" }, ["Donation amount"]));
+    var grid = element("div", { style: "display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;" });
     DONATION_AMOUNTS.forEach(function(amount) {
-      var choice = element("button", { type: "button", "data-orbit-amount": String(amount), style: "height:44px;border-radius:8px;border:1px solid rgba(128,128,128,.5);background:rgba(255,255,255,.06);color:inherit;font-size:14px;font-weight:650;cursor:pointer;" }, ["$" + amount]);
+      var choice = element("button", { type: "button", "data-orbit-amount": String(amount), style: "height:42px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.06);color:#f4f4f5;font-size:14px;font-weight:600;cursor:pointer;" }, ["$" + amount]);
       choice.addEventListener("click", function() {
         var input = body.querySelector("#orbit-custom-amount");
-        if (input) {
-          input.value = "";
-        }
+        if (input) input.value = "";
         donate(amount, body);
       });
       grid.appendChild(choice);
     });
     body.appendChild(grid);
     var customLabel = element("label", { htmlFor: "orbit-custom-amount", style: "display:block;font-size:13px;font-weight:600;margin-bottom:6px;" }, ["Custom amount"]);
-    var custom = element("input", { id: "orbit-custom-amount", type: "number", min: "5", max: "500", value: "25", style: "width:100%;height:44px;border:1px solid rgba(128,128,128,.5);border-radius:8px;background:rgba(0,0,0,.18);color:inherit;padding:0 12px;font-size:15px;margin-bottom:12px;" });
+    var custom = element("input", { id: "orbit-custom-amount", type: "number", min: "5", max: "500", value: "25", style: "width:100%;height:42px;border:1px solid rgba(255,255,255,0.18);border-radius:8px;background:#0a0a0b;color:#f4f4f5;padding:0 12px;font-size:14px;margin-bottom:14px;outline:none;" });
     body.appendChild(customLabel);
     body.appendChild(custom);
-    var donateButton = element("button", { type: "button", style: "width:100%;height:46px;border:0;border-radius:9px;background:#e7e9ee;color:#0a0a0b;font-size:15px;font-weight:700;cursor:pointer;" }, ["Continue to Stripe"]);
+    var donateButton = element("button", { type: "button", style: "width:100%;height:44px;border:0;border-radius:8px;background:#e7e9ee;color:#0a0a0b;font-size:14px;font-weight:700;cursor:pointer;" }, ["Continue to Stripe"]);
     donateButton.addEventListener("click", function() {
       var amount = Number(custom.value);
       if (!Number.isInteger(amount) || amount < 5 || amount > 500) {
@@ -415,17 +593,15 @@
       donate(amount, body);
     });
     body.appendChild(donateButton);
-    body.appendChild(element("div", { id: "orbit-donate-message", role: "status", style: "display:none;margin-top:12px;border:1px solid rgba(128,128,128,.4);border-radius:9px;padding:10px 12px;font-size:13.5px;line-height:1.45;" }));
-    return panelShell("Donate", body);
+    body.appendChild(element("div", { id: "orbit-donate-message", role: "status", style: "display:none;margin-top:12px;border:1px solid rgba(255,255,255,0.15);background:#1a1a1e;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.4;" }));
+    return panelShell("Support Orbit", body);
   }
 
   function setDonateMessage(body, message, isError) {
     var node = body.querySelector("#orbit-donate-message");
-    if (!node) {
-      return;
-    }
+    if (!node) return;
     node.style.display = "block";
-    node.style.color = isError ? "#ff9d94" : "inherit";
+    node.style.color = isError ? "#c4544c" : "inherit";
     node.textContent = message;
   }
 
@@ -476,14 +652,12 @@
 
   function ensureAudioContexts() {
     var Constructor = audioContextConstructor();
-    if (!Constructor) {
-      throw new Error("AudioContext is unavailable");
-    }
+    if (!Constructor) throw new Error("AudioContext is unavailable");
     if (!translation.input || translation.input.state === "closed") {
       translation.input = new Constructor();
     }
     if (!translation.output || translation.output.state === "closed") {
-      translation.output = new Constructor();
+      translation.output = new Constructor({ sampleRate: 24000 });
     }
     return { input: translation.input, output: translation.output };
   }
@@ -494,193 +668,7 @@
       contexts.input.resume().catch(function() { return null; });
       contexts.output.resume().catch(function() { return null; });
     } catch (ignored) {
-      return;
-    }
-  }
-
-  function isShareSourceType(value) {
-    return /screen|desktop|window|tab|display/i.test(String(value || ""));
-  }
-
-  function trackVideoType(track) {
-    var value = track && track.videoType ? track.videoType : "";
-    var jitsiTrack = track && track.jitsiTrack;
-    if (!value && jitsiTrack && typeof jitsiTrack.getVideoType === "function") {
-      try {
-        value = jitsiTrack.getVideoType() || "";
-      } catch (ignored) {
-        value = "";
-      }
-    }
-    return String(value || "").toLowerCase();
-  }
-
-  function addTranslationTrack(result, mediaTrack, signature) {
-    var id;
-    if (!mediaTrack || mediaTrack.kind !== "audio" || mediaTrack.readyState !== "live") {
-      return false;
-    }
-    id = mediaTrack.id || signature;
-    if (result.seen[id]) {
-      return false;
-    }
-    result.seen[id] = true;
-    result.tracks.push(mediaTrack);
-    result.signature.push(signature + ":" + id);
-    return true;
-  }
-
-  function translationMedia() {
-    var store = appStore();
-    var result = {
-      tracks: [],
-      signature: [],
-      seen: {},
-      remoteAudioCount: 0,
-      shareAudioCount: 0,
-      screenShareActive: false
-    };
-    var state;
-    var tracks;
-    if (!store) {
-      return result;
-    }
-    state = store.getState();
-    tracks = state["features/base/tracks"] || [];
-
-    tracks.forEach(function(track) {
-      var jitsiTrack = track && track.jitsiTrack;
-      var mediaTrack = null;
-      var participantId = track && track.participantId ? track.participantId : "remote";
-      var sourceName = "";
-      var trackId = "";
-      var sourceType = "";
-
-      if (!track || !jitsiTrack) {
-        return;
-      }
-
-      // Jitsi keeps the browser getDisplayMedia stream on the local desktop
-      // video track. That original stream contains system/tab audio when the
-      // user checked "Share audio", even if Jitsi does not expose a separate
-      // local audio entry in the Redux track list.
-      if (track.local && track.mediaType === "video" && trackVideoType(track) === "desktop") {
-        result.screenShareActive = true;
-        if (typeof jitsiTrack.getOriginalStream === "function") {
-          try {
-            var originalStream = jitsiTrack.getOriginalStream();
-            if (originalStream && typeof originalStream.getAudioTracks === "function") {
-              originalStream.getAudioTracks().forEach(function(audioTrack) {
-                if (addTranslationTrack(result, audioTrack, "local-share-original")) {
-                  result.shareAudioCount += 1;
-                }
-              });
-            }
-          } catch (ignoredOriginalStream) {
-            // Continue and try an explicit share-audio track if Jitsi exposes one.
-          }
-        }
-        return;
-      }
-
-      if (track.mediaType !== "audio" || track.muted || track.isReceivingData === false || typeof jitsiTrack.getTrack !== "function") {
-        return;
-      }
-
-      try {
-        mediaTrack = jitsiTrack.getTrack();
-        if (typeof jitsiTrack.getParticipantId === "function") {
-          participantId = jitsiTrack.getParticipantId() || participantId;
-        }
-        if (typeof jitsiTrack.getSourceName === "function") {
-          sourceName = jitsiTrack.getSourceName() || "";
-        }
-        if (typeof jitsiTrack.getTrackId === "function") {
-          trackId = jitsiTrack.getTrackId() || "";
-        }
-        sourceType = jitsiTrack.sourceType || track.sourceType || "";
-      } catch (ignoredTrack) {
-        mediaTrack = null;
-      }
-
-      if (!trackId && mediaTrack) {
-        trackId = mediaTrack.id || "audio";
-      }
-
-      // Every remote audio source is valid translator input.
-      if (!track.local) {
-        if (addTranslationTrack(result, mediaTrack, "remote:" + String(participantId) + ":" + String(sourceName) + ":" + String(trackId))) {
-          result.remoteAudioCount += 1;
-        }
-        return;
-      }
-
-      // Never translate the local microphone. Only explicit local share/system
-      // audio is admitted here to avoid feeding the listener's own speech back
-      // into Gemini.
-      if (isShareSourceType(sourceType) || trackVideoType(track) === "desktop") {
-        result.screenShareActive = true;
-        if (addTranslationTrack(result, mediaTrack, "local-share:" + String(sourceName) + ":" + String(trackId))) {
-          result.shareAudioCount += 1;
-        }
-      }
-    });
-
-    result.signature = result.signature.sort().join("|");
-    return result;
-  }
-
-  function setTranslationStatus(text, color) {
-    var status = document.querySelector("#orbit-translation-status");
-    if (status) {
-      status.textContent = text;
-    }
-    var retry = document.querySelector("#orbit-retry");
-    if (retry) {
-      retry.style.display = translation.status === "error" ? "block" : "none";
-    }
-    void color;
-  }
-
-  function setTranslationDebug(text) {
-    var node = document.querySelector("#orbit-translation-debug");
-    if (node) {
-      node.textContent = text;
-    }
-  }
-
-  function updateTranslationDebug() {
-    var sources = translation.sourceCount || 0;
-    var parts = ["Audio sources: " + sources];
-    if (translation.shareAudioCount) {
-      parts.push("shared: " + translation.shareAudioCount);
-    }
-    if (translation.remoteAudioCount) {
-      parts.push("remote: " + translation.remoteAudioCount);
-    }
-    parts.push("PCM packets: " + (translation.packetsSent || 0));
-    if (translation.packetsSent) {
-      parts.push("signal: " + Math.round((translation.lastInputPeak || 0) * 100) + "%");
-    }
-    setTranslationDebug(parts.join(" • "));
-  }
-
-  function setTranslationText(kind, text) {
-    var node = document.querySelector(kind === "source" ? "#orbit-source-text" : "#orbit-translated-text");
-    if (node) {
-      node.textContent = text;
-    }
-  }
-
-  function setTranslationError(message) {
-    translation.status = "error";
-    translation.error = message;
-    setTranslationStatus(message, "#ff9d94");
-    setTranslationText("source", translation.source || "Waiting for participant audio.");
-    setTranslationText("translated", translation.translated || "Translation will appear here.");
-    var retry = document.querySelector("#orbit-retry");
-    if (retry) {
-      retry.style.display = "block";
+      // Ignored
     }
   }
 
@@ -692,60 +680,40 @@
   }
 
   function disconnectInput() {
+    (translation.sourceNodes || []).forEach(function(node) {
+      try { node.disconnect(); } catch (ignored) { /* Ignore */ }
+    });
+    translation.sourceNodes = [];
     if (translation.processor) {
-      try {
-        translation.processor.disconnect();
-      } catch (ignoredProcessor) {
-        // Disconnect failed
-      }
+      try { translation.processor.disconnect(); } catch (ignored) { /* Ignore */ }
       translation.processor.onaudioprocess = null;
       translation.processor = null;
     }
     if (translation.mixerNode) {
-      try {
-        translation.mixerNode.disconnect();
-      } catch (ignoredMixer) {
-        // Disconnect failed
-      }
+      try { translation.mixerNode.disconnect(); } catch (ignored) { /* Ignore */ }
       translation.mixerNode = null;
     }
-    translation.sourceNodes.forEach(function(source) {
-      try {
-        source.disconnect();
-      } catch (ignoredSource) {
-        return;
-      }
-    });
-    translation.sourceNodes = [];
   }
 
   function stopOutputPlayback() {
-    translation.playing.forEach(function(source) {
-      try {
-        source.stop();
-      } catch (ignoredStop) {
-        return;
-      }
+    (translation.playing || []).forEach(function(source) {
+      try { source.stop(); } catch (ignored) { /* Ignore */ }
     });
     translation.playing = [];
-    translation.nextTime = translation.output ? translation.output.currentTime : 0;
+    if (translation.output) {
+      translation.nextTime = translation.output.currentTime;
+    }
   }
 
   function closeSocket() {
     var socket = translation.socket;
+    if (!socket) return;
     translation.socket = null;
-    if (!socket) {
-      return;
-    }
     socket.onopen = null;
     socket.onmessage = null;
     socket.onerror = null;
     socket.onclose = null;
-    try {
-      socket.close();
-    } catch (ignored) {
-      return;
-    }
+    try { socket.close(); } catch (ignored) { /* Ignore */ }
   }
 
   function stopTranslation(keepAudio) {
@@ -829,17 +797,136 @@
       translation.playing = translation.playing.filter(function(item) {
         return item !== source;
       });
+      if (!translation.playing.length && translation.status === "playing") {
+        translation.status = "listening";
+        setTranslationStatus("Listening for speech…", "#8aa892");
+      }
     };
   }
 
-  function syncTranslation() {
-    var media;
-    var expectedSignature;
-    if (panel.active !== "translator") {
-      return;
+  function translationMedia() {
+    if (panel.audioSource === "mic" && panel.micStream) {
+      var micTracks = panel.micStream.getAudioTracks().filter(function(t) { return t.readyState === "live"; });
+      return {
+        tracks: micTracks,
+        signature: ["mic:" + (micTracks[0] ? micTracks[0].id : "mic")].join("|"),
+        seen: {},
+        remoteAudioCount: 0,
+        shareAudioCount: 0,
+        screenShareActive: false
+      };
     }
-    media = translationMedia();
 
+    var store = appStore();
+    var result = {
+      tracks: [],
+      signature: [],
+      seen: {},
+      remoteAudioCount: 0,
+      shareAudioCount: 0,
+      screenShareActive: false
+    };
+    if (!store) return result;
+
+    var state = store.getState();
+    var tracks = state["features/base/tracks"] || [];
+
+    tracks.forEach(function(track) {
+      var jitsiTrack = track && track.jitsiTrack;
+      var mediaTrack = null;
+      var participantId = track && track.participantId ? track.participantId : "remote";
+      var sourceName = "";
+      var trackId = "";
+
+      if (!track || !jitsiTrack) return;
+
+      // EXCLUDE current user's own microphone to prevent self-translation and feedback loops!
+      if (track.local) {
+        return;
+      }
+
+      if (track.mediaType === "video" && (track.videoType === "desktop" || (jitsiTrack.getVideoType && jitsiTrack.getVideoType() === "desktop"))) {
+        result.screenShareActive = true;
+        if (typeof jitsiTrack.getOriginalStream === "function") {
+          try {
+            var orig = jitsiTrack.getOriginalStream();
+            if (orig && typeof orig.getAudioTracks === "function") {
+              orig.getAudioTracks().forEach(function(audioTrack) {
+                if (audioTrack && audioTrack.kind === "audio" && audioTrack.readyState === "live") {
+                  var id = audioTrack.id || "share";
+                  if (!result.seen[id]) {
+                    result.seen[id] = true;
+                    result.tracks.push(audioTrack);
+                    result.signature.push("share:" + id);
+                    result.shareAudioCount += 1;
+                  }
+                }
+              });
+            }
+          } catch (ignored) { /* Ignore */ }
+        }
+      }
+
+      if (track.mediaType !== "audio" || track.muted || typeof jitsiTrack.getTrack !== "function") return;
+
+      try {
+        mediaTrack = jitsiTrack.getTrack();
+        if (typeof jitsiTrack.getParticipantId === "function") participantId = jitsiTrack.getParticipantId() || participantId;
+        if (typeof jitsiTrack.getSourceName === "function") sourceName = jitsiTrack.getSourceName() || "";
+        trackId = jitsiTrack.getTrackId ? jitsiTrack.getTrackId() : (mediaTrack ? mediaTrack.id : "");
+      } catch (ignored) {
+        mediaTrack = null;
+      }
+
+      if (mediaTrack && mediaTrack.kind === "audio" && mediaTrack.readyState === "live") {
+        var sigId = String(participantId) + ":" + String(sourceName) + ":" + String(trackId);
+        if (!result.seen[sigId]) {
+          result.seen[sigId] = true;
+          result.tracks.push(mediaTrack);
+          result.signature.push(sigId);
+          if (!track.local) result.remoteAudioCount += 1;
+        }
+      }
+    });
+
+    result.signature = result.signature.sort().join("|");
+    return result;
+  }
+
+  function setTranslationStatus(text, color) {
+    var status = document.querySelector("#orbit-translation-status");
+    var dot = document.querySelector("#orbit-status-dot");
+    var eq = document.querySelector("#orbit-eq-wrap");
+    if (status) status.textContent = text;
+    if (dot) dot.style.background = color || "#71717a";
+    if (eq) eq.style.display = translation.status === "playing" ? "flex" : "none";
+    var retry = document.querySelector("#orbit-retry");
+    if (retry) retry.style.display = translation.status === "error" ? "block" : "none";
+  }
+
+  function setTranslationDebug(text) {
+    var node = document.querySelector("#orbit-translation-debug");
+    if (node) node.textContent = text;
+  }
+
+  function updateTranslationDebug() {
+    setTranslationDebug("Remote audio sources: " + translation.sourceCount + " • Packets sent: " + translation.packetsSent);
+  }
+
+  function setTranslationText(kind, text) {
+    var node = document.querySelector(kind === "source" ? "#orbit-source-text" : "#orbit-translated-text");
+    if (node) node.textContent = text;
+  }
+
+  function setTranslationError(message) {
+    translation.status = "error";
+    translation.error = message;
+    setTranslationStatus("Translation error", "#c4544c");
+    setTranslationText("translated", message);
+  }
+
+  function syncTranslation() {
+    var media = translationMedia();
     translation.sourceCount = media.tracks.length;
     translation.remoteAudioCount = media.remoteAudioCount;
     translation.shareAudioCount = media.shareAudioCount;
@@ -849,31 +936,20 @@
     if (!media.tracks.length) {
       if (translation.signature || translation.status === "connecting" || translation.status === "listening" || translation.status === "playing") {
         stopTranslation(true);
-        translation.screenShareActive = media.screenShareActive;
-        updateTranslationDebug();
       }
       translation.status = "idle";
-      if (media.screenShareActive) {
-        setTranslationStatus("Screen share detected, but no shared audio track is available.", "#888");
-        setTranslationText("source", "Re-share the tab/window and enable Share audio.");
-      } else {
-        setTranslationStatus("Waiting for participant or shared-screen audio.", "#888");
-        setTranslationText("source", translation.source || "Waiting for participant or shared-screen audio.");
-      }
+      setTranslationStatus("Waiting for audio input…", "#71717a");
+      setTranslationText("source", panel.audioSource === "mic" ? "Test mic active. Speak to translate." : "Waiting for remote participants or shared media…");
       return;
     }
 
-    expectedSignature = media.signature + "|" + panel.target;
+    var expectedSignature = media.signature + "|" + panel.target;
     if (translation.signature === expectedSignature && (translation.socket || translation.reconnectTimer || translation.status === "connecting")) {
       return;
     }
 
     stopTranslation(true);
     translation.sourceCount = media.tracks.length;
-    translation.remoteAudioCount = media.remoteAudioCount;
-    translation.shareAudioCount = media.shareAudioCount;
-    translation.screenShareActive = media.screenShareActive;
-    updateTranslationDebug();
     startTranslation(media.tracks, expectedSignature, panel.target);
   }
 
@@ -884,27 +960,25 @@
     translation.status = "connecting";
     translation.error = "";
     translation.signature = signature;
-    translation.source = "";
-    translation.translated = "";
     translation.target = target;
     translation.mediaTracks = mediaTracks.slice();
     translation.sessionHandle = "";
     translation.reconnectAttempts = 0;
     translation.packetsSent = 0;
-    translation.lastInputPeak = 0;
     updateTranslationDebug();
-    setTranslationStatus("Connecting to live translator…", "#ffd479");
-    setTranslationText("source", "Listening…");
-    setTranslationText("translated", "Translation will appear here.");
+    setTranslationStatus("Connecting to Gemini 3.5 Live…", "#eab308");
+    setTranslationText("source", "Listening for speech…");
+    setTranslationText("translated", "Translation will appear here in real time.");
+
     try {
       contexts = ensureAudioContexts();
+      contexts.input.resume().catch(function() { return null; });
+      contexts.output.resume().catch(function() { return null; });
+      translation.nextTime = contexts.output.currentTime;
     } catch (contextError) {
-      setTranslationError("This browser cannot start live audio translation.");
+      setTranslationError("Browser audio system could not be initialized.");
       return;
     }
-    contexts.input.resume().catch(function() { return null; });
-    contexts.output.resume().catch(function() { return null; });
-    translation.nextTime = contexts.output.currentTime;
 
     fetch("/api/translate-token", {
       method: "POST",
@@ -917,9 +991,7 @@
         });
       })
       .then(function(result) {
-        if (generation !== translation.generation) {
-          return;
-        }
+        if (generation !== translation.generation) return;
         if (!result.ok || !result.payload.token || !result.payload.model) {
           setTranslationError(result.payload.error || "Translation could not start. Please try again.");
           return;
@@ -929,184 +1001,131 @@
         openLiveSocket(mediaTracks, result.payload.token, result.payload.model, target, generation, "");
       })
       .catch(function() {
-        if (generation !== translation.generation) {
-          return;
-        }
-        setTranslationError("Translation could not start. Please try again.");
+        if (generation !== translation.generation) return;
+        setTranslationError("Translation service unavailable.");
       });
-  }
-
-  function scheduleReconnect(generation) {
-    var delay;
-    if (generation !== translation.generation || panel.active !== "translator" || translation.reconnectTimer) {
-      return;
-    }
-    translation.reconnectAttempts += 1;
-    if (!translation.sessionHandle || translation.reconnectAttempts > 2) {
-      var tracks = translation.mediaTracks.slice();
-      var signature = translation.signature;
-      var target = translation.target;
-      translation.reconnectTimer = window.setTimeout(function() {
-        translation.reconnectTimer = null;
-        if (generation !== translation.generation || panel.active !== "translator") {
-          return;
-        }
-        stopTranslation(true);
-        if (tracks.length && signature && target) {
-          startTranslation(tracks, signature, target);
-        }
-      }, 600);
-      setTranslationStatus("Refreshing translation connection…", "#ffd479");
-      return;
-    }
-    delay = Math.min(2000, 300 * translation.reconnectAttempts);
-    setTranslationStatus("Reconnecting translation…", "#ffd479");
-    translation.reconnectTimer = window.setTimeout(function() {
-      translation.reconnectTimer = null;
-      if (generation !== translation.generation || panel.active !== "translator") {
-        return;
-      }
-      openLiveSocket(
-        translation.mediaTracks,
-        translation.token,
-        translation.model,
-        translation.target,
-        generation,
-        translation.sessionHandle
-      );
-    }, delay);
   }
 
   function openLiveSocket(mediaTracks, token, model, target, generation, sessionHandle) {
     var socket;
-    var setup;
-    clearReconnectTimer();
-    disconnectInput();
+    var url = LIVE_SOCKET_URL + "?key=" + encodeURIComponent(token);
     try {
-      socket = new WebSocket(LIVE_SOCKET_URL + "?access_token=" + encodeURIComponent(token));
+      socket = new WebSocket(url);
     } catch (socketError) {
-      scheduleReconnect(generation);
+      setTranslationError("WebSocket connection to Gemini Live failed.");
       return;
     }
     translation.socket = socket;
+
     socket.onopen = function() {
-      if (generation !== translation.generation || translation.socket !== socket) {
+      if (generation !== translation.generation) {
+        try { socket.close(); } catch (ignored) { /* Ignore */ }
         return;
       }
-      setup = {
+      var setup = {
         model: model.indexOf("models/") === 0 ? model : "models/" + model,
         generationConfig: {
           responseModalities: ["AUDIO"],
           mediaResolution: "MEDIA_RESOLUTION_MEDIUM",
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
           contextWindowCompression: {
             triggerTokens: "0",
             slidingWindow: { targetTokens: "0" }
           },
-          translationConfig: { targetLanguageCode: target, echoTargetLanguage: true }
+          translationConfig: {
+            targetLanguageCode: target,
+            echoTargetLanguage: true
+          },
+          inputAudioTranscription: {},
+          outputAudioTranscription: {}
         },
-        sessionResumption: sessionHandle ? { handle: sessionHandle } : {},
+        sessionResumption: sessionHandle ? { handle: sessionHandle } : {}
       };
       socket.send(JSON.stringify({ setup: setup }));
     };
+
     socket.onmessage = function(event) {
-      var message;
-      var content;
-      if (generation !== translation.generation || translation.socket !== socket) {
-        return;
-      }
+      if (generation !== translation.generation) return;
+      var data;
       try {
-        message = JSON.parse(event.data);
+        data = JSON.parse(event.data);
       } catch (parseError) {
         return;
       }
-      if (message.sessionResumptionUpdate && message.sessionResumptionUpdate.resumable && message.sessionResumptionUpdate.newHandle) {
-        translation.sessionHandle = message.sessionResumptionUpdate.newHandle;
+
+      if (data.sessionResumption && data.sessionResumption.handle) {
+        translation.sessionHandle = data.sessionResumption.handle;
       }
-      if (message.goAway) {
-        setTranslationStatus("Refreshing translation connection…", "#ffd479");
+
+      var serverContent = data.serverContent;
+      if (serverContent) {
+        if (serverContent.interrupted) {
+          stopOutputPlayback();
+        }
+        if (serverContent.inputTranscription && serverContent.inputTranscription.text) {
+          translation.source = serverContent.inputTranscription.text;
+          setTranslationText("source", translation.source);
+        }
+        if (serverContent.outputTranscription && serverContent.outputTranscription.text) {
+          translation.translated = serverContent.outputTranscription.text;
+          setTranslationText("translated", translation.translated);
+        }
+
+        var parts = (serverContent.modelTurn && serverContent.modelTurn.parts) || [];
+        parts.forEach(function(part) {
+          if (part.text && !translation.translated) {
+            translation.translated = part.text;
+            setTranslationText("translated", part.text);
+          }
+          var audio = part.inlineData;
+          if (audio && audio.data && audio.mimeType && audio.mimeType.indexOf("audio/") === 0) {
+            translation.status = "playing";
+            setTranslationStatus("Speaking translated audio…", "#e7e9ee");
+            if (translation.output) {
+              var next = { value: translation.nextTime };
+              scheduleOutput(base64ToBytes(audio.data), translation.output, next);
+              translation.nextTime = next.value;
+            }
+          }
+        });
+
+        if (serverContent.turnComplete && translation.status !== "playing") {
+          translation.status = "listening";
+          setTranslationStatus("Listening for speech…", "#8aa892");
+        }
       }
-      if (message.setupComplete) {
+
+      if (data.setupComplete) {
         translation.status = "listening";
-        translation.reconnectAttempts = 0;
-        setTranslationStatus("Live translator connected. Listening…", "#8fd49a");
-        updateTranslationDebug();
+        setTranslationStatus("Listening & translating…", "#8aa892");
         startInput(mediaTracks, generation);
-        return;
-      }
-      content = message.serverContent;
-      if (!content) {
-        return;
-      }
-      if (content.interrupted) {
-        stopOutputPlayback();
-      }
-      if (content.inputTranscription && content.inputTranscription.text) {
-        translation.source = content.inputTranscription.text;
-        setTranslationText("source", translation.source);
-      }
-      if (content.outputTranscription && content.outputTranscription.text) {
-        translation.translated = content.outputTranscription.text;
-        translation.status = "playing";
-        setTranslationStatus("Playing translation.", "#8fd49a");
-        setTranslationText("translated", translation.translated);
-      }
-      (content.modelTurn && content.modelTurn.parts ? content.modelTurn.parts : []).forEach(function(part) {
-        if (!part || !part.inlineData || !part.inlineData.data || String(part.inlineData.mimeType || "").indexOf("audio/") !== 0) {
-          return;
-        }
-        translation.status = "playing";
-        setTranslationStatus("Playing translation.", "#8fd49a");
-        if (translation.output) {
-          scheduleOutput(base64ToBytes(part.inlineData.data), translation.output, {
-            get value() { return translation.nextTime; },
-            set value(next) { translation.nextTime = next; }
-          });
-        }
-      });
-      if (content.turnComplete) {
-        translation.status = "listening";
-        setTranslationStatus("Listening for remote speech.", "#8fd49a");
       }
     };
+
     socket.onerror = function() {
-      if (generation !== translation.generation || translation.socket !== socket) {
-        return;
-      }
-      setTranslationStatus("Reconnecting translation…", "#ffd479");
+      if (generation !== translation.generation) return;
+      setTranslationError("Gemini live connection failed.");
     };
+
     socket.onclose = function() {
-      if (generation !== translation.generation || translation.socket !== socket) {
-        return;
-      }
-      translation.socket = null;
-      disconnectInput();
-      scheduleReconnect(generation);
+      if (generation !== translation.generation) return;
+      translation.status = "idle";
+      setTranslationStatus("Connection closed. Reconnecting…", "#eab308");
+      window.setTimeout(function() {
+        syncTranslation();
+      }, 1500);
     };
   }
 
-  function downsample(input, fromRate) {
-    var rate = fromRate || 16000;
-    var ratio;
-    var length;
-    var output;
-    var index;
-    var start;
-    var end;
-    var total;
-    var count;
-    if (rate === 16000) {
-      return input;
-    }
-    ratio = rate / 16000;
-    length = Math.max(1, Math.floor(input.length / ratio));
-    output = new Float32Array(length);
-    for (index = 0; index < length; index += 1) {
-      start = Math.floor(index * ratio);
-      end = Math.min(input.length, Math.floor((index + 1) * ratio));
-      total = 0;
-      count = 0;
+  function downsample(input, rate) {
+    if (rate === 16000) return input;
+    var ratio = rate / 16000;
+    var length = Math.max(1, Math.floor(input.length / ratio));
+    var output = new Float32Array(length);
+    for (var index = 0; index < length; index += 1) {
+      var start = Math.floor(index * ratio);
+      var end = Math.min(input.length, Math.floor((index + 1) * ratio));
+      var total = 0;
+      var count = 0;
       while (start < end) {
         total += input[start];
         start += 1;
@@ -1120,55 +1139,43 @@
   function startInput(mediaTracks, generation) {
     var input = translation.input;
     var socket = translation.socket;
-    var liveTracks;
-    var mixer;
-    var processor;
-    if (!input || !socket || generation !== translation.generation) {
-      return;
-    }
+    if (!input || !socket || generation !== translation.generation) return;
     disconnectInput();
-    liveTracks = mediaTracks.filter(function(track) {
-      return track && track.kind === "audio" && track.readyState === "live";
-    });
+
+    var liveTracks = mediaTracks.filter(function(t) { return t && t.kind === "audio" && t.readyState === "live"; });
     if (!liveTracks.length) {
-      setTranslationError("No live participant audio is available to translate.");
+      setTranslationError("No active audio tracks to translate.");
       return;
     }
+
     try {
-      mixer = input.createGain();
+      var mixer = input.createGain();
       mixer.gain.value = 1 / Math.max(1, Math.sqrt(liveTracks.length));
       translation.sourceNodes = liveTracks.map(function(track) {
         var source = input.createMediaStreamSource(new MediaStream([track]));
         source.connect(mixer);
         return source;
       });
-      processor = input.createScriptProcessor(1024, 1, 1);
+
+      var processor = input.createScriptProcessor(1024, 1, 1);
       processor.onaudioprocess = function(event) {
-        var live;
-        var peak = 0;
-        var i;
-        if (generation !== translation.generation || !translation.socket || translation.socket.readyState !== 1) {
-          return;
-        }
+        if (generation !== translation.generation || !translation.socket || translation.socket.readyState !== 1) return;
         event.outputBuffer.getChannelData(0).fill(0);
-        if (translation.socket.bufferedAmount > 512 * 1024) {
-          return;
-        }
-        live = downsample(event.inputBuffer.getChannelData(0), input.sampleRate);
-        for (i = 0; i < live.length; i += 1) {
-          peak = Math.max(peak, Math.abs(live[i]));
-        }
-        translation.lastInputPeak = peak;
+        if (translation.socket.bufferedAmount > 512 * 1024) return;
+
+        var live = downsample(event.inputBuffer.getChannelData(0), input.sampleRate);
         translation.packetsSent += 1;
-        if (translation.packetsSent === 1 || translation.packetsSent % 10 === 0) {
+        if (translation.packetsSent === 1 || translation.packetsSent % 15 === 0) {
           updateTranslationDebug();
         }
+
         translation.socket.send(JSON.stringify({
           realtimeInput: {
             audio: { data: floatToBase64(live), mimeType: "audio/pcm;rate=16000" }
           }
         }));
       };
+
       mixer.connect(processor);
       processor.connect(input.destination);
       translation.mixerNode = mixer;
@@ -1176,37 +1183,34 @@
       input.resume().catch(function() { return null; });
     } catch (inputError) {
       disconnectInput();
-      setTranslationError("This browser cannot capture meeting or shared-screen audio.");
+      setTranslationError("Failed to capture audio stream for translation.");
     }
   }
 
   function poll() {
-    var store = appStore();
-    if (!store) {
-      return;
-    }
     wrapNotify();
-    if (panel.active === "translator") {
-      syncTranslation();
-    }
-    var state = panelState();
-    if (panel.active && (!state || !state.isOpen)) {
+    syncTranslation();
+  }
+
+  function handleKeyDown(event) {
+    if (event.key === "Escape" && panel.active) {
       closeWrapper();
       return;
     }
-    renderActivePanel();
+    if ((event.key === "x" || event.key === "X") && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      var target = event.target;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      togglePanel("translator");
+    }
   }
 
   function boot() {
-    if (!window.APP || !appApi() || !appStore()) {
-      window.setTimeout(boot, 250);
-      return;
-    }
+    injectSidebarStyles();
     wrapNotify();
-    injectPanelSideStyle();
     document.addEventListener("click", documentClick, true);
+    document.addEventListener("keydown", handleKeyDown, true);
     window.setInterval(poll, POLL_MS);
-    window.setTimeout(poll, 250);
+    window.setTimeout(poll, 300);
   }
 
   if (document.readyState === "loading") {
