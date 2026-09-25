@@ -248,7 +248,7 @@ export function Room({ room, media }: { room: string; media: LocalMedia }) {
             mirror={mirror}
           />
         </div>
-        <SidePanel now={now} mediaStream={media.stream} />
+        <SidePanel now={now} mediaStream={media.stream} shareStream={shareStream} />
       </div>
 
       <div className="dock flex shrink-0 items-center justify-center gap-2 px-3 pt-1">

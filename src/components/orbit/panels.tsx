@@ -37,9 +37,11 @@ function formatElapsed(startedAt: number | null, now: number) {
 export function SidePanel({
   now,
   mediaStream,
+  shareStream,
 }: {
   now: number;
   mediaStream?: MediaStream | null;
+  shareStream?: MediaStream | null;
 }) {
   const panel = useMeeting((state) => state.panel);
   const closePanel = useMeeting((state) => state.closePanel);
@@ -83,7 +85,11 @@ export function SidePanel({
         {panel === "shortcuts" && <ShortcutsPanel />}
         {panel === "stats" && <StatsPanel now={now} />}
         {panel === "translator" && (
-          <TranslatorPanel active={panel === "translator"} mediaStream={mediaStream ?? null} />
+          <TranslatorPanel
+            active={panel === "translator"}
+            mediaStream={mediaStream ?? null}
+            shareStream={shareStream ?? null}
+          />
         )}
         {panel === "donate" && (
           <DonatePanel returnPath={typeof window !== "undefined" ? window.location.pathname : "/"} />

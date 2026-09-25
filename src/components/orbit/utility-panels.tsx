@@ -23,9 +23,11 @@ const DONATION_AMOUNTS = [10, 25, 50, 100];
 export function TranslatorPanel({
   active,
   mediaStream,
+  shareStream,
 }: {
   active: boolean;
   mediaStream: MediaStream | null;
+  shareStream?: MediaStream | null;
 }) {
   const [targetLanguageCode, setTargetLanguageCode] = useState("en");
   const [searchQuery, setSearchQuery] = useState("");
@@ -33,8 +35,12 @@ export function TranslatorPanel({
   const [audioSource, setAudioSource] = useState<"auto" | "mic">("auto");
   const [customMicStream, setCustomMicStream] = useState<MediaStream | null>(null);
 
-  // If user requests explicit mic capture or mediaStream is passed
-  const activeStream = audioSource === "mic" && customMicStream ? customMicStream : mediaStream;
+  // If user requests explicit mic capture, use mic stream. Otherwise prioritize shareStream if it has audio tracks, or fallback to mediaStream.
+  const activeStream = useMemo(() => {
+    if (audioSource === "mic" && customMicStream) return customMicStream;
+    if (shareStream && shareStream.getAudioTracks().length > 0) return shareStream;
+    return mediaStream;
+  }, [audioSource, customMicStream, shareStream, mediaStream]);
 
   const { state, restart } = useLiveTranslation(activeStream, active, targetLanguageCode);
   const selectedLanguage = useMemo(
@@ -116,7 +122,7 @@ export function TranslatorPanel({
                 </div>
               </div>
 
-              <div className="scroll-thin flex-1 overflow-y-auto p-1.5">
+              <div className="max-h-80 scroll-thin overflow-y-auto overscroll-contain p-1.5">
                 {filteredLanguages.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted">No language matches &quot;{searchQuery}&quot;</p>
                 ) : (
