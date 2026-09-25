@@ -73,6 +73,23 @@ export function TranslatorPanel({
     }
   }
 
+  async function toggleTranslator() {
+    if (!isTranslatorRunning) {
+      if (!activeStream) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          setCustomMicStream(stream);
+          setAudioSource("mic");
+        } catch {
+          // Fallback
+        }
+      }
+      setIsTranslatorRunning(true);
+    } else {
+      setIsTranslatorRunning(false);
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-elevated text-fg">
       {/* Language Selector Header */}
@@ -174,7 +191,7 @@ export function TranslatorPanel({
               ? "border border-danger/30 text-danger hover:bg-danger/10"
               : "bg-accent text-ink hover:opacity-90",
           )}
-          onClick={() => setIsTranslatorRunning((prev) => !prev)}
+          onClick={() => void toggleTranslator()}
         >
           <Sparkles className="size-4" />
           {isTranslatorRunning ? "Stop Translator" : "Start Translator"}

@@ -1,4 +1,5 @@
-import { GoogleGenAI, MediaResolution, Modality } from "@google/genai";
+import fs from "node:fs";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { TRANSLATION_LANGUAGE_CODES } from "@/lib/translation-languages";
@@ -8,11 +9,28 @@ const requestSchema = z.object({
   targetLanguageCode: z.string().refine((code) => TRANSLATION_LANGUAGE_CODES.has(code)),
 });
 
+function getGeminiApiKey(): string | undefined {
+  let key = process.env.GEMINI_API_KEY?.trim();
+  if (!key || key.startsWith("MY_")) {
+    try {
+      if (fs.existsSync("/tmp/.gemini_key")) {
+        const fileKey = fs.readFileSync("/tmp/.gemini_key", "utf8").trim();
+        if (fileKey && !fileKey.startsWith("MY_")) {
+          key = fileKey;
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  }
+  return key || undefined;
+}
+
 export const Route = createFileRoute("/api/translate-token")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const apiKey = process.env.GEMINI_API_KEY;
+        const apiKey = getGeminiApiKey();
         if (!apiKey) {
           return Response.json(
             { error: "Live translation is not configured yet. Set GEMINI_API_KEY." },
@@ -22,31 +40,21 @@ export const Route = createFileRoute("/api/translate-token")({
 
         try {
           const body = requestSchema.parse(await request.json());
-          const ai = new GoogleGenAI({
-            apiKey,
-            httpOptions: { apiVersion: "v1beta" },
-          });
+          const ai = new GoogleGenAI({ apiKey });
           const now = Date.now();
           const token = await ai.authTokens.create({
             config: {
-              uses: 1,
-              expireTime: new Date(now + 30 * 60 * 1000).toISOString(),
-              newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
+              uses: 10,
+              expireTime: new Date(now + 60 * 60 * 1000).toISOString(),
+              newSessionExpireTime: new Date(now + 10 * 60 * 1000).toISOString(),
               liveConnectConstraints: {
                 model: MODEL,
                 config: {
                   responseModalities: [Modality.AUDIO],
-                  mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
-                  contextWindowCompression: {
-                    triggerTokens: "0",
-                    slidingWindow: { targetTokens: "0" },
-                  },
                   translationConfig: {
                     targetLanguageCode: body.targetLanguageCode,
                     echoTargetLanguage: true,
                   },
-                  inputAudioTranscription: {},
-                  outputAudioTranscription: {},
                 },
               },
             },
@@ -61,11 +69,13 @@ export const Route = createFileRoute("/api/translate-token")({
 
           return Response.json({ token: token.name, model: MODEL });
         } catch (error) {
+          console.error("Translate token error:", error);
           if (error instanceof z.ZodError) {
             return Response.json({ error: "Choose a supported language." }, { status: 400 });
           }
+          const message = error instanceof Error ? error.message : "Translation could not start. Please try again.";
           return Response.json(
-            { error: "Translation could not start. Please try again." },
+            { error: message },
             { status: 502 },
           );
         }

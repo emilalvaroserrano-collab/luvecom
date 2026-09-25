@@ -103,7 +103,10 @@ export function useLiveTranslation(stream: MediaStream | null, enabled: boolean,
         outputContext = new AudioContext({ sampleRate: 24000 });
         await Promise.all([inputContext.resume(), outputContext.resume()]);
 
-        const ai = new GoogleGenAI({ apiKey: payload.token, apiVersion: "v1beta" });
+        const ai = new GoogleGenAI({
+          apiKey: payload.token,
+          httpOptions: { apiVersion: "v1alpha" },
+        });
         const model = payload.model || "models/gemini-3.5-live-translate-preview";
         const config = {
           responseModalities: [Modality.AUDIO],
