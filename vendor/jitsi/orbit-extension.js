@@ -5,7 +5,7 @@
   var LIVE_SOCKET_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
   var POLL_MS = 1000;
   var DONATION_AMOUNTS = [10, 25, 50, 100];
-  var panel = { active: null, target: "en", languages: null, languagesLoading: false, audioSource: "auto", micStream: null };
+  var panel = { active: null, target: "en", languages: null, languagesLoading: false, audioSource: "auto", micStream: null, isRunning: false };
   var translation = {
     status: "idle",
     error: "",
@@ -370,6 +370,34 @@
     dropdownMenu.appendChild(listWrap);
     langSection.appendChild(dropdownMenu);
     body.appendChild(langSection);
+
+    // Start / Stop Translator Button
+    var startBtnWrap = element("div", { style: "padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);" });
+    var btnStartTranslator = element("button", {
+      type: "button",
+      id: "orbit-btn-start-translator",
+      style: "width:100%;height:40px;border-radius:8px;border:none;background:" + (panel.isRunning ? "rgba(196,84,76,0.2)" : "#e7e9ee") + ";color:" + (panel.isRunning ? "#fff7f6" : "#0a0a0b") + ";font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:opacity 0.15s ease;" + (panel.isRunning ? "border:1px solid rgba(196,84,76,0.4);" : ""),
+      text: panel.isRunning ? "Stop Translator" : "Start Translator"
+    });
+    btnStartTranslator.addEventListener("click", function() {
+      panel.isRunning = !panel.isRunning;
+      if (panel.isRunning) {
+        btnStartTranslator.textContent = "Stop Translator";
+        btnStartTranslator.style.background = "rgba(196,84,76,0.2)";
+        btnStartTranslator.style.color = "#fff7f6";
+        btnStartTranslator.style.border = "1px solid rgba(196,84,76,0.4)";
+        syncTranslation();
+      } else {
+        btnStartTranslator.textContent = "Start Translator";
+        btnStartTranslator.style.background = "#e7e9ee";
+        btnStartTranslator.style.color = "#0a0a0b";
+        btnStartTranslator.style.border = "none";
+        stopTranslation(true);
+        setTranslationStatus("Ready — click 'Start Translator'", "#71717a");
+      }
+    });
+    startBtnWrap.appendChild(btnStartTranslator);
+    body.appendChild(startBtnWrap);
 
     function populateLanguages(languages, filter) {
       listWrap.innerHTML = "";
@@ -946,6 +974,15 @@
     translation.shareAudioCount = media.shareAudioCount;
     translation.screenShareActive = media.screenShareActive;
     updateTranslationDebug();
+
+    if (!panel.isRunning) {
+      if (translation.signature || translation.status === "connecting" || translation.status === "listening" || translation.status === "playing") {
+        stopTranslation(true);
+      }
+      translation.status = "idle";
+      setTranslationStatus("Ready — click 'Start Translator'", "#71717a");
+      return;
+    }
 
     if (!media.tracks.length) {
       if (translation.signature || translation.status === "connecting" || translation.status === "listening" || translation.status === "playing") {

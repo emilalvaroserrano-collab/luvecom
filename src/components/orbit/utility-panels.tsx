@@ -34,6 +34,7 @@ export function TranslatorPanel({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [audioSource, setAudioSource] = useState<"auto" | "mic">("auto");
   const [customMicStream, setCustomMicStream] = useState<MediaStream | null>(null);
+  const [isTranslatorRunning, setIsTranslatorRunning] = useState(false);
 
   // If user requests explicit mic capture, use mic stream. Otherwise prioritize shareStream if it has audio tracks, or fallback to mediaStream.
   const activeStream = useMemo(() => {
@@ -42,7 +43,7 @@ export function TranslatorPanel({
     return mediaStream;
   }, [audioSource, customMicStream, shareStream, mediaStream]);
 
-  const { state, restart } = useLiveTranslation(activeStream, active, targetLanguageCode);
+  const { state, restart } = useLiveTranslation(activeStream, active && isTranslatorRunning, targetLanguageCode);
   const selectedLanguage = useMemo(
     () => TRANSLATION_LANGUAGES.find((item) => item.code === targetLanguageCode) ?? TRANSLATION_LANGUAGES[19],
     [targetLanguageCode],
@@ -160,6 +161,24 @@ export function TranslatorPanel({
             </Popover.Content>
           </Popover.Portal>
         </Popover.Root>
+      </div>
+
+      {/* Start / Stop Translator Button */}
+      <div className="border-b border-line bg-subtle/30 px-4 py-3">
+        <Button
+          variant={isTranslatorRunning ? "secondary" : "primary"}
+          size="default"
+          className={cn(
+            "w-full gap-2 font-medium shadow-sm transition-all",
+            isTranslatorRunning
+              ? "border border-danger/30 text-danger hover:bg-danger/10"
+              : "bg-accent text-ink hover:opacity-90",
+          )}
+          onClick={() => setIsTranslatorRunning((prev) => !prev)}
+        >
+          <Sparkles className="size-4" />
+          {isTranslatorRunning ? "Stop Translator" : "Start Translator"}
+        </Button>
       </div>
 
       {/* Connection & Live Stream Status */}
