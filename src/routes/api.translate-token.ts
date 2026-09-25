@@ -1,9 +1,9 @@
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI, MediaResolution, Modality } from "@google/genai";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { TRANSLATION_LANGUAGE_CODES } from "@/lib/translation-languages";
 
-const MODEL = "gemini-3.5-live-translate-preview";
+const MODEL = "models/gemini-3.5-live-translate-preview";
 const requestSchema = z.object({
   targetLanguageCode: z.string().refine((code) => TRANSLATION_LANGUAGE_CODES.has(code)),
 });
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/api/translate-token")({
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
           return Response.json(
-            { error: "Live translation is not configured yet." },
+            { error: "Live translation is not configured yet. Set GEMINI_API_KEY." },
             { status: 503 },
           );
         }
@@ -36,14 +36,17 @@ export const Route = createFileRoute("/api/translate-token")({
                 model: MODEL,
                 config: {
                   responseModalities: [Modality.AUDIO],
-                  inputAudioTranscription: {},
-                  outputAudioTranscription: {},
+                  mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
+                  contextWindowCompression: {
+                    triggerTokens: "0",
+                    slidingWindow: { targetTokens: "0" },
+                  },
                   translationConfig: {
                     targetLanguageCode: body.targetLanguageCode,
-                    echoTargetLanguage: false,
+                    echoTargetLanguage: true,
                   },
-                  sessionResumption: {},
-                  contextWindowCompression: { slidingWindow: {} },
+                  inputAudioTranscription: {},
+                  outputAudioTranscription: {},
                 },
               },
             },

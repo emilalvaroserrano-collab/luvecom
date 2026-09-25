@@ -696,6 +696,7 @@
       try {
         translation.processor.disconnect();
       } catch (ignoredProcessor) {
+        // Disconnect failed
       }
       translation.processor.onaudioprocess = null;
       translation.processor = null;
@@ -704,6 +705,7 @@
       try {
         translation.mixerNode.disconnect();
       } catch (ignoredMixer) {
+        // Disconnect failed
       }
       translation.mixerNode = null;
     }
@@ -995,12 +997,16 @@
         model: model.indexOf("models/") === 0 ? model : "models/" + model,
         generationConfig: {
           responseModalities: ["AUDIO"],
+          mediaResolution: "MEDIA_RESOLUTION_MEDIUM",
           inputAudioTranscription: {},
           outputAudioTranscription: {},
-          translationConfig: { targetLanguageCode: target, echoTargetLanguage: false }
+          contextWindowCompression: {
+            triggerTokens: "0",
+            slidingWindow: { targetTokens: "0" }
+          },
+          translationConfig: { targetLanguageCode: target, echoTargetLanguage: true }
         },
         sessionResumption: sessionHandle ? { handle: sessionHandle } : {},
-        contextWindowCompression: { slidingWindow: {} }
       };
       socket.send(JSON.stringify({ setup: setup }));
     };

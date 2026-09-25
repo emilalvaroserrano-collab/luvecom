@@ -4,6 +4,8 @@ import { X } from "lucide-react";
 import { roomLabel } from "@/lib/rooms";
 import { useMeeting } from "@/lib/meeting-store";
 import { Button } from "@/components/ui/button";
+import { DonatePanel, TranslatorPanel } from "@/components/orbit/utility-panels";
+import { cn } from "@/lib/cn";
 
 const SHORTCUTS = [
   ["M", "Mute or unmute"],
@@ -32,11 +34,18 @@ function formatElapsed(startedAt: number | null, now: number) {
   return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-export function SidePanel({ now }: { now: number }) {
+export function SidePanel({
+  now,
+  mediaStream,
+}: {
+  now: number;
+  mediaStream?: MediaStream | null;
+}) {
   const panel = useMeeting((state) => state.panel);
   const closePanel = useMeeting((state) => state.closePanel);
   if (!panel) return null;
 
+  const isLeft = panel === "translator";
   const title =
     panel === "chat"
       ? "Chat"
@@ -46,10 +55,21 @@ export function SidePanel({ now }: { now: number }) {
           ? "Settings"
           : panel === "shortcuts"
             ? "Shortcuts"
-            : "Stats";
+            : panel === "stats"
+              ? "Stats"
+              : panel === "translator"
+                ? "Live Translator"
+                : "Support Orbit";
 
   return (
-    <aside className="panel-in absolute inset-0 z-20 flex min-h-0 flex-col bg-elevated sm:static sm:w-96 sm:border-l sm:border-line">
+    <aside
+      className={cn(
+        "absolute inset-0 z-20 flex min-h-0 flex-col bg-elevated sm:static sm:w-96",
+        isLeft
+          ? "panel-in-left sm:order-first sm:border-r sm:border-line"
+          : "panel-in sm:border-l sm:border-line",
+      )}
+    >
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
         <h2 className="text-base font-medium">{title}</h2>
         <Button size="icon" variant="ghost" aria-label="Close panel" onClick={closePanel}>
@@ -62,6 +82,12 @@ export function SidePanel({ now }: { now: number }) {
         {panel === "settings" && <SettingsPanel />}
         {panel === "shortcuts" && <ShortcutsPanel />}
         {panel === "stats" && <StatsPanel now={now} />}
+        {panel === "translator" && (
+          <TranslatorPanel active={panel === "translator"} mediaStream={mediaStream ?? null} />
+        )}
+        {panel === "donate" && (
+          <DonatePanel returnPath={typeof window !== "undefined" ? window.location.pathname : "/"} />
+        )}
       </div>
     </aside>
   );

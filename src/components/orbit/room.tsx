@@ -6,6 +6,7 @@ import {
   Ellipsis,
   Hand,
   Keyboard,
+  Languages,
   LayoutGrid,
   Lock,
   MessageSquare,
@@ -140,6 +141,7 @@ export function Room({ room, media }: { room: string; media: LocalMedia }) {
         v: toggleVideo,
         c: () => togglePanel("chat"),
         p: () => togglePanel("people"),
+        x: () => togglePanel("translator"),
         r: toggleHand,
         t: () => setLayout(useMeeting.getState().layout === "tile" ? "speaker" : "tile"),
         s: () => void toggleShare(),
@@ -246,7 +248,7 @@ export function Room({ room, media }: { room: string; media: LocalMedia }) {
             mirror={mirror}
           />
         </div>
-        <SidePanel now={now} />
+        <SidePanel now={now} mediaStream={media.stream} />
       </div>
 
       <div className="dock flex shrink-0 items-center justify-center gap-2 px-3 pt-1">
@@ -272,6 +274,14 @@ export function Room({ room, media }: { room: string; media: LocalMedia }) {
           </ToolButton>
           <ToolButton label={localHand ? "Lower hand" : "Raise hand"} pressed={localHand} onClick={toggleHand}>
             <Hand className="size-5" />
+          </ToolButton>
+
+          <ToolButton
+            label="Live translator"
+            pressed={panel === "translator"}
+            onClick={() => togglePanel("translator")}
+          >
+            <Languages className="size-5" />
           </ToolButton>
 
           <Popover.Root>
@@ -334,6 +344,7 @@ export function Room({ room, media }: { room: string; media: LocalMedia }) {
                 sideOffset={12}
                 className="z-40 w-56 rounded-lg border border-line bg-elevated p-1 shadow-panel"
               >
+                <MenuItem icon={Languages} label="Live Translator" onClick={() => togglePanel("translator")} />
                 <MenuItem icon={Settings} label="Settings" onClick={() => togglePanel("settings")} />
                 <MenuItem icon={Keyboard} label="Shortcuts" onClick={() => togglePanel("shortcuts")} />
                 <MenuItem icon={ChartNoAxesColumn} label="Stats" onClick={() => togglePanel("stats")} />

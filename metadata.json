@@ -1,0 +1,8 @@
+{
+  "name": "Orbit Meeting",
+  "description": "Secure, high-quality meetings. Start a room in the browser — no account.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

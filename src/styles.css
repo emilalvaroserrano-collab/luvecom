@@ -71,6 +71,10 @@
   animation: panel-in 400ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.panel-in-left {
+  animation: panel-in-left 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .stage-grid {
   grid-auto-rows: minmax(152px, 1fr);
 }
@@ -83,6 +87,17 @@
   from {
     opacity: 0;
     transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes panel-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
   }
   to {
     opacity: 1;

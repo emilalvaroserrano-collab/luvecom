@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
