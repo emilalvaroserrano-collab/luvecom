@@ -449,13 +449,6 @@
     indicatorStrip.appendChild(eqWrap);
     body.appendChild(indicatorStrip);
 
-    // Model Tag
-    var modelTag = element("div", { style: "display:flex;align-items:center;justify-content:space-between;padding:6px 16px;background:rgba(255,255,255,0.02);border-bottom:1px solid rgba(255,255,255,0.06);font-size:11px;color:#a1a1aa;" }, [
-      element("span", { text: "gemini-3.5-live-translate-preview" }),
-      element("span", { style: "padding:2px 6px;background:rgba(255,255,255,0.08);border-radius:4px;font-size:10px;font-weight:600;color:#e7e9ee;", text: "AUDIO-TO-AUDIO" })
-    ]);
-    body.appendChild(modelTag);
-
     // Audio Source Mode Switch (Remote & Shared Audio vs Microphone test mode)
     var audioToggleWrap = element("div", { style: "padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;gap:8px;" });
     var btnRoomAudio = element("button", {

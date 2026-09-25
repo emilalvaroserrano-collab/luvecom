@@ -204,17 +204,6 @@ export function TranslatorPanel({
         </div>
       </div>
 
-      {/* Model Spec Badge */}
-      <div className="flex items-center justify-between border-b border-line bg-subtle/60 px-4 py-2 text-[11px] text-faint">
-        <span className="flex items-center gap-1.5">
-          <Sparkles className="size-3 text-amber-400" />
-          <span>gemini-3.5-live-translate-preview</span>
-        </span>
-        <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] font-mono text-muted">
-          AUDIO-TO-AUDIO
-        </span>
-      </div>
-
       {/* Content Area */}
       <div className="scroll-thin min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         {!activeStream && (
@@ -224,7 +213,7 @@ export function TranslatorPanel({
               <h3 className="text-sm font-semibold text-fg">Real-Time Audio Translation</h3>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-muted">
-              Live translation uses <strong>models/gemini-3.5-live-translate-preview</strong> to translate incoming participant speech and microphone input directly into {selectedLanguage.name} with natural synchronized audio output.
+              Live translation translates incoming participant speech and shared audio directly into {selectedLanguage.name} with natural synchronized audio output.
             </p>
             <div className="mt-3 flex gap-2">
               <Button
